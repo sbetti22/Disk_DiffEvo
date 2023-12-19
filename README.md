@@ -9,9 +9,10 @@ based off of disk modeling codes by: Johan Mazoyer (https://github.com/johanmazo
 and Kellen Lawson ()
 
 The make_model() function will call the MCFOST generator which is from: https://github.com/mperrin/mcfost-python.  All you need is the utils.py and paramfile.py.  The folder called mcfost MUST be in the same folder as this code to run! 
-    If you get an error "Don't know how to set a parameter named XX", then go to paramfile/set_parameter(), and add a new elif statement to call that parameter
 
-    for example: 
+If you get an error "Don't know how to set a parameter named XX", then go to paramfile/set_parameter(), and add a new elif statement to call that parameter
+
+for example: 
         elif paramname == 'inclinations':
             self.RT_imin = value
             self.RT_imax = value
@@ -23,5 +24,7 @@ All free parameters are in the de_parameter_file.yaml
 
 You also need an initialize_files folder with:
 	- starting MCFOST .para file
+ 
 	- an original PSF convolved model
+ 
 	- the klbasis .h5 file from diskFM
