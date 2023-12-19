@@ -1,0 +1,86 @@
+
+PATH: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam                       # path to data
+DATA_DIR : /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/spaceklip_2rolls/padded                                                # location of raw datasets
+DISKFM_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo     # main directory to save mcfost models
+SAVE_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/Round_test/mcfost_models                                                          # actual directory to save mcfost models
+FILE_PREFIX: 49Ceti_NRCA2_MASK335R_F200W                                               # name of level 2 data - roll 9
+REDUCEDDATA_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/spaceklip_2rolls/klipsub                                        # path to reduced RDI data
+NOISE_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/background/klipsub
+
+# #central storage locations
+# PATH = '/user/sbetti/disk_modeling/data'                                                    # path to data
+# DATA_DIR = PATH + '/padded'                                                # location of raw datasets
+# DISKFM_DIR = '/user/sbetti/disk_modeling'     # main directory to save mcfost models
+# SAVE_DIR = DISKFM_DIR + '/Round3'                                                           # actual directory to save mcfost models
+# FILE_PREFIX = '49Ceti_NRCA2_MASK335R_F200W'                                                 # name of level 2 data - roll 9
+# REDUCEDDATA_DIR = PATH + '/klipsub'                                         # path to reduced RDI data
+# NOISE_DIR  =  PATH + '/klipsub'
+
+INITIAL_PARA: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/initialize_files/49Ceti_mcfost_params.para
+
+WAVELENGTH: 2.0 #um
+FILTER: 'F200W'
+INSTRUMENT: 'NIRCam'
+    
+# load DISTANCE_STAR & PIXSCALE_INS and make them global
+DISTANCE_STAR: 59
+PIXSCALE_INS: 0.031217475
+        
+# load reduced_data and make it a global variable
+REDUCED_DATA: RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCA2_F200W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits  ### we take only the third KL mode
+NOISE: BKG_STD_RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCA2_F200W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits # this is the ANNULUS STD NOISE
+
+BOUNDS:
+  I: [75,85] 
+  H0: [2,10]  
+  MDUST: [5.e-10, 8.e-9] # REQUIRES DOT TO BE NUMBER
+  BETA: [1,4] 
+  F: [1,2] 
+  AMIN: [1, 5] 
+  AEXP: [1,3] 
+  POROSITY: [0.01, 0.99]
+  DUSTSET: [2,3]
+  ALPH_VIS: [0.01, 2]
+  AMP: [.1, 5]
+
+GRIDGEN_DICT:
+  - inclinations
+  - scale_height
+  - dust_mass
+  - surface_density
+  - flaring
+  - dust_amin
+  - dust_exponent
+  - dust_porosity
+  - dust_settling
+  - alpha_viscosity
+
+LABELS:
+  I: $i$ (deg)
+  H0: $h_{50}$ (AU)
+  MDUST: M$_D$
+  BETA: surface density\nexp\n$\beta$
+  F: flaring\n$f$
+  AMIN: a$_\mathrm{min}
+  AEXP: a$_\mathrm{exp}
+  POROSITY: porosity
+  DUSTSET: type of\ndust settling
+  ALPH_VIS: $\alpha_{viscosity}$
+  AMP: A
+
+
+obsdate: 2023-08-24T22:49:38.762
+grid_shape: circle
+ROLL_REF_ANGLE: 261.370
+OBJ_INFO:
+  name: 49 Ceti 
+  sptype: A0V 
+  Teff: 9817 
+  log_g: 4.0
+  metallicity: -0.5 
+  dist: 59
+  flux: 5.458
+  flux_units: vegamag
+  bp_ref: bp_2mass('k')
+  RA_obj: 36.48744  # RA (decimal deg) of source
+  Dec_obj:  -12.29054  # Dec (decimal deg) of source
