@@ -12,8 +12,9 @@ The make_model() function will call the MCFOST generator which is from: https://
 
 If you get an error "Don't know how to set a parameter named XX", then go to paramfile/set_parameter(), and add a new elif statement to call that parameter
 
-for example: 
-        elif paramname == 'inclinations':
+for example 
+        
+	elif paramname == 'inclinations':
             self.RT_imin = value
             self.RT_imax = value
 
@@ -24,7 +25,6 @@ All free parameters are in the de_parameter_file.yaml
 
 You also need an initialize_files folder with:
 	- starting MCFOST .para file
- 
 	- an original PSF convolved model
  
 	- the klbasis .h5 file from diskFM
