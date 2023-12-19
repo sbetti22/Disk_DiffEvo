@@ -24,7 +24,6 @@ Each parameter tested will be saved to its own .csv file.  This should be relati
 All free parameters are in the de_parameter_file.yaml
 
 You also need an initialize_files folder with:
-	- starting MCFOST .para file
-	- an original PSF convolved model
- 
-	- the klbasis .h5 file from diskFM
+	1. starting MCFOST .para file
+	2. an original PSF convolved model
+	3. the klbasis .h5 file from diskFM
