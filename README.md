@@ -7,6 +7,22 @@ author: Sarah Betti
 based off of disk modeling codes by: Johan Mazoyer (https://github.com/johanmazoyer/debrisdisk_mcmc_fit_and_plot), differential evolution technique by: Kellen Lawson (https://ui.adsabs.harvard.edu/abs/2020AJ....160..163L/abstract), and the pyKLIP (J. Wang; https://ui.adsabs.harvard.edu/abs/2015ascl.soft06001W/abstract) DiskFM tools (J. Mazoyer: https://ui.adsabs.harvard.edu/abs/2020SPIE11447E..59M/abstract) 
 
 ---
+necessary packages (and their dependencies): 
+  - mcfost (https://ipag.osug.fr/~pintec/mcfost/docs/html/index.html)
+  - pyklip
+  - webbpsf
+  - mcfost (https://github.com/mperrin/mcfost-python)
+  - scipy
+  - astropy
+  - yaml
+
+for JWST PSF convolution: 
+  - jwst
+  - spaceKLIP
+  - webbpsf
+  - webbpsf_ext
+
+---
 The main module is `DiskDiffEvo.py` with all free variables listed in the `de_parameter_file.yaml`. The differential evolution is performed using the `scipy.optimize.differential_evolution()` function.  
 
 In order to create the initial files necessary to run `DiskDiffEvo` (inc. a First convolved model and the klbasis for diskFM, a mask for calculating chi2), run through the `make_initialize_files.ipynb`.
