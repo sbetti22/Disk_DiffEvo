@@ -1,24 +1,35 @@
+"""
+Disk convolution code for JWST/NIRCam position dependent PSF convolution
+author: Sarah Betti
+formalized on: 12/20/2023 
 
-import matplotlib.pyplot as plt
-import pymcfost as mcfost
+based off of PSF modeling by: Kellen Lawson (https://ui.adsabs.harvard.edu/abs/2023AJ....166..150L/graphics) utilizing webbpsf (M. Perrin; https://github.com/spacetelescope/webbpsf) and webbpsf_ext (J. Leisenring; https://github.com/JarronL/webbpsf_ext).
+
+The webbpsf PSF convolution is based off of the webbpsf_ext example > https://github.com/JarronL/webbpsf_ext/blob/main/notebooks/NIRCam_MASK430R_F356W_Vega.ipynb
+
+"""
+
+import numpy as np
+import os
+
 from astropy.io import fits
 from astropy import constants as sc
-import numpy as np
+from scipy import ndimage
+
 # Progress bar
 from tqdm.auto import trange, tqdm
-from scipy import ndimage
+
 import webbpsf_ext, pysiaf
 from webbpsf_ext import image_manip, setup_logging, spectra, coords
-# Import class to setup pointing info
 from webbpsf_ext.coords import jwst_point
 from webbpsf_ext import miri_filter, nircam_filter, bp_2mass
 from webbpsf_ext.image_manip import pad_or_cut_to_size
-import numpy as np
-import os
 from webbpsf_ext import stellar_spectrum
 
 def make_model_mJypx(model_path, wavelength):
-
+    '''
+    convert MCFOST model from W/m2 to mJy/pixel
+    '''
     disk_model_Wm2 = (fits.open(model_path)[0].data[0,0,0,:,:])
     freq = sc.c.value / (wavelength * 1e-6)
 
@@ -56,6 +67,8 @@ def make_spec(name=None, sptype=None, flux=None, flux_units=None, bp_ref=None, *
 
 def make_psfs(ROLL_REF_ANGLE, obj_params, filt, obsdate='2023-08-24T22:49:38.762', **kwargs):
     '''
+    make position dependent PSFs
+    #
         # # Information necessary to create pysynphot spectrum of star
     # obj_params = {
     #     'name': '49 Ceti', 
@@ -70,6 +83,7 @@ def make_psfs(ROLL_REF_ANGLE, obj_params, filt, obsdate='2023-08-24T22:49:38.762
     print('  --> starting make_psfs')
     if isinstance(obj_params['bp_ref'], str):
         obj_params['bp_ref'] = eval(obj_params['bp_ref'])
+
     # Mask information
     mask = kwargs.get('mask','MASK335R')
     pupil = kwargs.get('pupil', 'MASKRND')

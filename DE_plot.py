@@ -1,54 +1,56 @@
+"""
+Disk plotting code for DiskDiffEvo solution
+author: Sarah Betti
+formalized on: 12/20/2023 (originally written in 2020)
+
+based off of PSF modeling by: Kellen Lawson (https://ui.adsabs.harvard.edu/abs/2023AJ....166..150L/graphics) and implemented by Sarah Betti (https://ui.adsabs.harvard.edu/abs/2022AJ....163..145B/abstract)
+"""
+
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import glob
+
 from astropy.io import fits
-from astropy import units as u
-from scipy import stats
-import os
 from astropy.convolution import convolve
 from astropy import constants as const
 from astropy import units as u
-
-from astropy.visualization import simple_norm
-from astropy.visualization import ZScaleInterval
+from astropy.visualization import simple_norm, ZScaleInterval
 interval = ZScaleInterval()
 
-import sys
-import socket
-import warnings
+import os
+import copy
 
-from datetime import datetime
-
-import math as mt
-from scipy.ndimage import rotate
+from scipy import stats
 import scipy.ndimage as ndimage
 
 from matplotlib import rcParams
 from matplotlib.patches import Rectangle
 import matplotlib.lines as mlines
 import matplotlib.patches as patches
-
-import copy
-import pandas as pd
 from matplotlib.colors import Normalize
 import matplotlib.cm as cm
 
-# import pyklip.instruments.LMIRCam as LMIRCam
-# import pyklip.parallelized as parallelized
-# from pyklip.fmlib.diskfm import DiskFM
-# import pyklip.fm as fm
-# import pyklip.rdi as rdi
-# import mcfost
-import time
-import subprocess
+
+import make_bestfit_model as mbm
+from pyklip.fmlib.diskfm import DiskFM
 
 def pull_out_csvparams(FIL, **kwargs): 
+    '''pull out all parameters from csvs
+    Parameter:
+        FIL : list - list of .csv files from DiskDiffEvo.py 
+                OR
+        FIL : str - name of combined .csv file file after running through pull_out_csvparams() already
+
+        optional:
+            all_csv : boolean - determine if you are going though all parameters or opening the combined file default: True
+            savefig : str - name of final combined .csv file to save the dataframe to
+            clean_up : boolean - determine if you should remove all intermediary .csv files used to create the final combined file. default: True
+    '''
     if kwargs.get('all_csv'):
         print('going through .csv files')
         d = {}
         for i in FIL:
             hdr = pd.read_csv(i)
-        
             for name in hdr.columns:
                 if name not in d:
                     d[name] = []
@@ -68,30 +70,40 @@ def pull_out_csvparams(FIL, **kwargs):
         if 'Unnamed: 0' in df.columns.to_list():
             df = df.drop('Unnamed: 0', axis=1)
     
+    # get best fit solution 
     truths = df.iloc[df['CHI2'].argmin()]
     truths = truths.drop('CHI2').to_list()
     print(truths)
 
+    # drop the chi2 value from best fit solution list and put it in its own list
     data = df.drop('CHI2', axis=1)
     chi2 = df['CHI2']
     
+    # get path to mcfost folder of best fit model
     IND = np.where(chi2.values == np.nanmin(chi2.values))
     if kwargs.get('all_csv'):
         MCFOST_DIR = os.path.dirname(np.array(FIL)[IND][0])
     else:
         MCFOST_DIR = None
     
+    # return all parameters, all chi2, the best fit parameters, and best fit folder
     return data, chi2, truths, MCFOST_DIR
 
 def pull_out_params(FIL, params, **kwargs): 
+    '''OLD!  do not use !! 
+    pull out all parameters from .FITS or .csv 
+    Parameter:
+        FIL : list - list of .fits or .csv files from DiskDiffEvo.py 
+        params : list - list of free parameters to extract from header to .csv file
+        savefig : str (optional) - name of final combined .csv file to save the dataframe to
+        '''
     if '.csv' in FIL:
         print('opening csv file')
         df = pd.read_csv(FIL, index_col=False)
         if 'Unnamed: 0' in df.columns.to_list():
             df = df.drop('Unnamed: 0', axis=1)
         df = df[params]
-        
-        
+
     else:  
         print('going through .FITS files')
         d = {}
@@ -126,7 +138,26 @@ def pull_out_params(FIL, params, **kwargs):
 
 
 def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
+    '''
+    plot the parameter space explored as a corner plot
 
+    Parameter:
+        M : int - number of best fit parameters
+        data : dataframe - dataframe of all model parameters
+        truths : list - list of best fit model parameters
+        chi2 : dataframe -  dataframe of all chi2 values
+        bounds : list - list of lists of bounds used in DiskDiffEvo.py
+        colnames : list - labels to name the parameters
+        nu : degrees of freedom from chi2
+               
+        optional:
+            figsize : tuple - size of figure to plot
+            cmap : str - cmap color to use
+            vmin, vmax : float - vmin and vmax for Normalization of colormap
+            get_stats : boolean - determine if you should print the minimum and maximum values 
+            title : str - time of plot
+            savefig : str - outfile name to save corner plot
+    '''
     figsize = kwargs.get('figsize', (12,12))
     fig, axs = plt.subplots(figsize=figsize,ncols=M, nrows=M)
     
@@ -218,9 +249,34 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
     plt.show()
 
 
-import make_bestfit_model as mbm
-from pyklip.fmlib.diskfm import DiskFM
 def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, INITIAL_PARAMS=None, INSTRUMENT=None, DISTANCE_STAR=None, MASK=None, obsdate=None, grid_shape=None, bestparams_dict=None, amplitude=None, **kwargs):
+    '''
+    plot the best fit model found in DiskDiffEvo.  
+
+    Parameter:
+        MCFOST_DIR : str - path to where mcfost code is ran. 
+        BESTMOD_DIR : str - path to best fit model
+        REDUCED_DATA : str - path to original reduced data
+        NOISE : str - path to original std annulus noise data
+        WAVELENGTH : str - instrument filter name
+        FILE_PREFIX : str - prefix used for initial files 
+        MASK : str - path to fits file for mask
+
+        JUST IF YOU NEED TO CREATE THE FILES FROM SCATCH
+            INITIAL_PARAMS : str - name of the initial MCFOST .para file 
+            INSTRUMENT : str - name of instrument 
+            DISTANCE_STAR : float/int - distance to star in pc
+            obsdate : observation date
+            grid_shape : shape to make PSF grid
+            bestparams_dict : dictionary - dictionary of params for making PSF grid
+            amplitude : float - best fit amplitude to scale model
+               
+        optional:
+            make_files : boolean - determine if you need to make the best fit model (default=True)
+            title : str - time of plot
+            savefig : str - outfile name to save corner plot
+    '''
+    
     if kwargs.get('make_files'): 
         DISKOBJ = mbm.initialize_diskfm(os.path.dirname(MCFOST_DIR), FILE_PREFIX, REDUCED_DATA)
         BESTMOD_DIR = mbm.make_bestfit_model(MCFOST_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITIAL_PARAMS, FILE_PREFIX, INSTRUMENT, DISTANCE_STAR, MASK, obsdate, grid_shape, bestparams_dict, amplitude)
@@ -245,7 +301,7 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     disk_model_mJy_as2 = disk_model_mJy_px / modelpixelscale**2. 
 
     pad = (REDUCED_DATA.shape[0]//2) - (fits.getdata(BESTMOD_DIR + conv_mod).shape[0]//2)
-    disk_ml_convolved = np.pad(fits.getdata(BESTMOD_DIR + conv_mod), pad) * hdr['AMP'] #160
+    disk_ml_convolved = np.pad(fits.getdata(BESTMOD_DIR + conv_mod), pad) * hdr['AMP'] 
     data_pixscale = fits.getheader(BESTMOD_DIR + conv_mod)['PIXELSCL']
 
     #Measure the residuals
