@@ -2,10 +2,11 @@
 PATH: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam                       # path to data
 DATA_DIR : /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/spaceklip_2rolls/padded                                                # location of raw datasets
 DISKFM_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo     # main directory to save mcfost models
-SAVE_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/Round_test/mcfost_models                                                          # actual directory to save mcfost models
-FILE_PREFIX: 49Ceti_NRCA2_MASK335R_F200W                                               # name of level 2 data - roll 9
+SAVE_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/F444W_modeling/Round1/mcfost_models                                                          # actual directory to save mcfost models
+FILE_PREFIX: 49Ceti_NRCALONG_MASK335R_F444W                                               # name of level 2 data - roll 9
 REDUCEDDATA_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/spaceklip_2rolls/klipsub                                        # path to reduced RDI data
 NOISE_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/background/klipsub
+INITIALIZE_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/initialize_files
 
 # #central storage locations
 # PATH = '/user/sbetti/disk_modeling/data'                                                    # path to data
@@ -16,19 +17,19 @@ NOISE_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/backgroun
 # REDUCEDDATA_DIR = PATH + '/klipsub'                                         # path to reduced RDI data
 # NOISE_DIR  =  PATH + '/klipsub'
 
-INITIAL_PARA: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/initialize_files/49Ceti_mcfost_params.para
+INITIAL_PARA: 49Ceti_mcfost_F444W_params.para
 
-WAVELENGTH: 2.0 #um
-FILTER: 'F200W'
+WAVELENGTH: 4.44 #um
+FILTER: 'F444W'
 INSTRUMENT: 'NIRCam'
     
 # load DISTANCE_STAR & PIXSCALE_INS and make them global
 DISTANCE_STAR: 59
-PIXSCALE_INS: 0.031217475
+PIXSCALE_INS: 0.06247899 #0.031217475
         
 # load reduced_data and make it a global variable
-REDUCED_DATA: RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCA2_F200W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits  ### we take only the third KL mode
-NOISE: BKG_STD_RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCA2_F200W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits # this is the ANNULUS STD NOISE
+REDUCED_DATA: RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCALONG_F444W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits  ### we take only the third KL mode
+NOISE: BKG_STD_RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCALONG_F444W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits # this is the ANNULUS STD NOISE
 
 BOUNDS:
   I: [75,85] 

@@ -15,15 +15,14 @@ from webbpsf_ext import miri_filter, nircam_filter, bp_2mass
 from webbpsf_ext.image_manip import pad_or_cut_to_size
 import numpy as np
 import os
-def make_model_mJypx(model_path, wavelength):
-    # model_path = '../mcfost/F200W_oversample/data_2.0/RT.fits.gz'
-    # wavelength = 2.0
+from webbpsf_ext import stellar_spectrum
 
-    modelpixelscale = fits.getheader(model_path)['CDELT2'] * 3600 
+def make_model_mJypx(model_path, wavelength):
+
     disk_model_Wm2 = (fits.open(model_path)[0].data[0,0,0,:,:])
     freq = sc.c.value / (wavelength * 1e-6)
 
-    disk_model_mJy_px = ( (1e26 * disk_model_Wm2  / freq) * 1e3 ) #/ (modelpixelscale**2.)
+    disk_model_mJy_px = ( (1e26 * disk_model_Wm2  / freq) * 1e3 ) 
     mod_nx, mod_ny = disk_model_Wm2.shape[1], disk_model_Wm2.shape[0]
     mod_cx, mod_cy = mod_nx//2, mod_ny//2
 
@@ -33,11 +32,7 @@ def make_model_mJypx(model_path, wavelength):
     dist_from_center = np.sqrt((X - mod_cx)**2 + (Y-mod_cy)**2)
     mask = dist_from_center <= 2
     disk_model_mJy_px[mask] = 0
-    
-    # Roll1 = 263.9993704873808
-    # Roll2 = 274.00049644507976
-    # roll1_model = ndimage.rotate(disk_model_mJy_px, Roll1, reshape=False)
- 
+
     path = model_path.split('.fits')[0]
 
     fits.writeto(path + f'_mJypx.fits', disk_model_mJy_px, header = fits.getheader(model_path), overwrite=True)
@@ -49,9 +44,6 @@ def make_spec(name=None, sptype=None, flux=None, flux_units=None, bp_ref=None, *
     """
     Create pysynphot stellar spectrum from input dictionary properties.
     """
-
-    from webbpsf_ext import stellar_spectrum
-    
     # Renormalization arguments
     renorm_args = (flux, flux_units, bp_ref)
     
@@ -63,8 +55,21 @@ def make_spec(name=None, sptype=None, flux=None, flux_units=None, bp_ref=None, *
     return sp
 
 def make_psfs(ROLL_REF_ANGLE, obj_params, filt, obsdate='2023-08-24T22:49:38.762', **kwargs):
+    '''
+        # # Information necessary to create pysynphot spectrum of star
+    # obj_params = {
+    #     'name': '49 Ceti', 
+    #     'sptype': 'A0V', 
+    #     'Teff': 9817, 'log_g': 4.0, 'metallicity': -0.5, 
+    #     'dist': 59,
+    #     'flux': 5.458, 'flux_units': 'vegamag', 'bp_ref': bp_2mass('k'),
+    #     'RA_obj'  : +36.48744,  # RA (decimal deg) of source
+    #     'Dec_obj' :  -12.29054,  # Dec (decimal deg) of source
+    # }
+    '''
     print('  --> starting make_psfs')
-    obj_params['bp_ref'] = eval(obj_params['bp_ref'])
+    if isinstance(obj_params['bp_ref'], str):
+        obj_params['bp_ref'] = eval(obj_params['bp_ref'])
     # Mask information
     mask = kwargs.get('mask','MASK335R')
     pupil = kwargs.get('pupil', 'MASKRND')
@@ -83,6 +88,15 @@ def make_psfs(ROLL_REF_ANGLE, obj_params, filt, obsdate='2023-08-24T22:49:38.762
         # Observed and reference apertures
         ap_obs = f'{detector}_{mask}'
         ap_ref = f'{detector}_{mask}'
+    elif filt == 'F444W':
+        detector = kwargs.get('detector', 'NRCA5')
+        inst.detector=detector
+        inst.aperturename=f'{detector}_{mask}'
+        # Observed and reference apertures
+        ap_obs = f'{detector}_{mask}'
+        ap_ref = f'{detector}_{mask}'
+    else:
+        raise ValueError('filter does not exist in code.  need to add it')
 
     # Calculate PSF coefficients
     inst.gen_psf_coeff()
@@ -95,37 +109,21 @@ def make_psfs(ROLL_REF_ANGLE, obj_params, filt, obsdate='2023-08-24T22:49:38.762
     
     # Define the RA/Dec of reference aperture and telescope position angle
     # Position angle is angle of V3 axis rotated towards East
-    ra_ref, dec_ref = (obj_params['RA_obj'], obj_params['Dec_obj']) #(+36.48745,  -12.29054)  #  hdr['RA_REF'], hdr['DEC_REF'] ?? 
-    pos_ang = ROLL_REF_ANGLE #261.370   # hdr['ROLL_REF'] ?? 
+    ra_ref, dec_ref = (obj_params['RA_obj'], obj_params['Dec_obj']) 
+    pos_ang = ROLL_REF_ANGLE 
 
     # Set any baseline pointing offsets (e.g., specified in APT's Special Requirements)
     base_offset=(0,0)
     # Define a list of nominal dither offsets
-    dith_offsets = kwargs.get('offsets', [(0,0)])  # [(hdr['XOFFSET'], hdr['YOFFSET'])]
+    dith_offsets = kwargs.get('offsets', [(0,0)]) 
 
     # Telescope pointing information
     tel_point = jwst_point(ap_obs, ap_ref, ra_ref, dec_ref, pos_ang=pos_ang,
                         base_offset=base_offset, dith_offsets=dith_offsets)
-    
-    
-    # # Information necessary to create pysynphot spectrum of star
-    # obj_params = {
-    #     'name': '49 Ceti', 
-    #     'sptype': 'A0V', 
-    #     'Teff': 9817, 'log_g': 4.0, 'metallicity': -0.5, 
-    #     'dist': 59,
-    #     'flux': 5.458, 'flux_units': 'vegamag', 'bp_ref': bp_2mass('k'),
-    #     'RA_obj'  : +36.48744,  # RA (decimal deg) of source
-    #     'Dec_obj' :  -12.29054,  # Dec (decimal deg) of source
-    # }
 
     # Create stellar spectrum and add to dictionary
     sp_star = make_spec(**obj_params)
     obj_params['sp'] = sp_star
-
-    # # Get `sci` coord positions
-    # coord_obj = (obj_params['RA_obj'], obj_params['Dec_obj'])
-    # xsci, ysci = tel_point.radec_to_frame(coord_obj, frame_out='sci')
 
     # # Get sci position shifts from center in units of detector pixels
     # siaf_ap = tel_point.siaf_ap_obs
@@ -161,7 +159,7 @@ def make_psfgrid(inst, tel_point, grid_shape='circle'):
     hdul_psfs = inst.calc_psf_from_coeff(coord_vals=(xtel, ytel), coord_frame='tel', return_oversample=True)
     return hdul_psfs
 
-def convolve_disk(inst, tel_point, obj_params, hdul_psfs, disk_model_path, modelpixelscale, wavelength, distance ):
+def convolve_disk(inst, tel_point, obj_params, hdul_psfs, disk_model_path, modelpixelscale, wavelength, distance, verbose=False ):
     model_mJypx_path = make_model_mJypx(disk_model_path, wavelength)
     siaf_ap = tel_point.siaf_ap_obs
 
@@ -197,10 +195,6 @@ def convolve_disk(inst, tel_point, obj_params, hdul_psfs, disk_model_path, model
     im_sci, xsci_im, ysci_im = image_manip.distort_image(hdul_out, ext=0, to_frame='sci', return_coords=True, 
                                                         aper=siaf_ap, sci_cen=sci_cen)
 
-    # # Distort image onto 'tel' (V2, V3) coordinate grid for plot illustration
-    # im_tel, v2_im, v3_im = image_manip.distort_image(hdul_out, ext=0, to_frame='tel', return_coords=True, 
-    #                                                 aper=siaf_ap, sci_cen=sci_cen)
-
     # If the image is too large, then this process will eat up much of your computer's RAM
     # So, crop image to more reasonable size (20% oversized)
     osamp = inst.oversample
@@ -226,18 +220,10 @@ def convolve_disk(inst, tel_point, obj_params, hdul_psfs, disk_model_path, model
     im_conv = image_manip.convolve_image(hdul_disk_model_sci, hdul_psfs)
 
     # Add cropped image to final oversampled image
-    im_conv = pad_or_cut_to_size(im_conv, (640,640)) #hdul_full[0].data.shape
-
-    # im_psf = hdul_full[0].data.copy()
-    # hdul_full[0].data += im_conv
-
-    # # Subtract a reference PSF from the science data
-    # # Assume perfect subtraction
-    # im_ref = image_manip.frebin(im_psf, scale=1/osamp)
+    im_conv = pad_or_cut_to_size(im_conv, (640,640))
 
     # # Rebin science data to detector pixels
     im_sci = image_manip.frebin(im_conv, scale=1/osamp)
-    # imdiff = im_sci - im_ref
 
     # De-rotate to sky orientation
     imrot = image_manip.rotate_offset(im_sci, rotate_to_idl, reshape=False, cval=np.nan)
@@ -267,24 +253,7 @@ def convolve_disk(inst, tel_point, obj_params, hdul_psfs, disk_model_path, model
 
     path = disk_model_path.split('.fits')[0]
     outfile = path+ f'_model_{inst.aperturename}_{inst.filter}_mJyas2.fits'
-    # print(outfile)
+    if verbose: print('writing convolved image to: ', outfile)
     hdu_diff.writeto(outfile, overwrite=True)
 
     return imrot
-
-
-# def run():
-#     model_path = '../mcfost/F200W_oversample/data_2.0/RT.fits.gz'
-#     filt = 'F200W'
-#     modelpixelscale = fits.getheader(model_path)['CDELT2'] * 3600
-#     wavelength = 2.0
-#     convolve_disk(filt, model_path, modelpixelscale, wavelength)
-
-
-# def initialize_psfs(obsdate, grid_shape, filt):
-#     # obsdate='2023-08-24T22:49:38.762'
-#     # grid_shape='circle'
-#     # filt = 'F200W'
-#     inst, tel_point, obj_params = make_psfs(filt, obsdate=obsdate)
-#     hdul_psfs = make_psfgrid(inst, tel_point, grid_shape=grid_shape)
-#     return inst, tel_point, obj_params, hdul_psfs
