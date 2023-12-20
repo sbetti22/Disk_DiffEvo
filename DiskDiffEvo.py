@@ -178,7 +178,7 @@ def fobj(x):
     M = len(x)
     v = N-M
     chi2 = (1./v) * np.nansum(((data - mod) / noise)**2.)
-    logging.info('chi2 for' + file_path.split('/')[-3] + f' : {chi2}')
+    logging.info('chi2 for' + model_gz.split('/')[-3] + f' : {chi2}')
     # save parameters to .csv file.  each model gets its own .csv file b/c I can't figure out how to open/write/save 1 file while multiprocessing...
     file_path = model_gz.split(f'data_{WAVELENGTH}')[0]
 
@@ -295,8 +295,6 @@ if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
 logging.info(f'bounds {bounds}')
-logging.info('starting diskobj')   
-DISKOBJ = initialize_diskfm()
 
 csv_fils  = glob.glob(SAVE_DIR + '/*.csv')
 logging.info(f'deleting {len(csv_fils)} .csv files')
@@ -307,6 +305,9 @@ mcfost_fils  = glob.glob(SAVE_DIR + '/*')
 logging.info(f'deleting {len(mcfost_fils)} mcfost files')
 for mod in mcfost_fils:
     shutil.rmtree(mod)
+
+logging.info('starting diskobj')   
+DISKOBJ = initialize_diskfm()
 
 logging.info('starting PSF creation')
 obsdate=params_de_yaml['obsdate'] #'2023-08-24T22:49:38.762'
