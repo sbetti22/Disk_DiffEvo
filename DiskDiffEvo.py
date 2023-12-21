@@ -313,6 +313,7 @@ hdul_psfs = dc.make_psfgrid(inst, tel_point, grid_shape=grid_shape)
 logging.info('start DE')      
 # perform the differential evolution search
 start_time = datetime.now()
+logging.info(f'STARTING TIME: {start_time}')
 t1 = time.time()
 SAVE=False 
 ## SINGLE - only for a very very small and fast grid

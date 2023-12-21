@@ -19,10 +19,12 @@ interval = ZScaleInterval()
 
 import os
 import copy
+import glob
 
 from scipy import stats
 import scipy.ndimage as ndimage
 
+import matplotlib
 from matplotlib import rcParams
 from matplotlib.patches import Rectangle
 import matplotlib.lines as mlines
@@ -396,3 +398,44 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     if 'savefig' in kwargs:
         plt.savefig(kwargs['savefig'], dpi=150)
     plt.show()
+
+
+def run_doplot(yaml_paramater_file=None, SAVE_DIR=None, FILE_PREFIX=None, REDUCED_DATA=None, NOISE=None, WAVELENGTH=None, bounds=None, labels=None, nu=None, clean_up=False):
+    if yaml_paramater_file is not None:
+        with open(yaml_paramater_file, 'r') as yaml_file:
+            params_de_yaml = yaml.safe_load(yaml_file)
+
+        SAVE_DIR = params_de_yaml['SAVE_DIR']
+        FILE_PREFIX = params_de_yaml['FILE_PREFIX']   # name of level 2 data - roll 9
+        REDUCED_DATA = params_de_yaml['REDUCED_DATA']
+        NOISE = params_de_yaml['NOISE']
+        WAVELENGTH = params_de_yaml['WAVELENGTH']
+        bounds = params_de_yaml['bounds']
+        labels = params_de_yaml['labels']
+        nu = params_de_yaml['nu']
+        clean_up = params_de_yaml['CLEAN_UP']
+    
+    # do plotting and main .csv filing
+    print('starting plotting')
+    # extract all parameters from .csv file and put them into 1 file.  if clean_up=True, the original .csv files will be deleted leaving only the combined file. 
+    FIL = glob.glob(SAVE_DIR + '/*.csv')
+    data, chi2, truths, MCFOST_DIR = pull_out_csvparams(FIL, all_csv=True, savefig = os.path.dirname(SAVE_DIR) + f'/FINAL_DEchi2_{FILE_PREFIX}.csv', clean_up=clean_up)
+
+    # plot a corner plot of the parameter space
+    min_val, max_val = 0.03,0.99
+    n = 6
+    orig_cmap = plt.cm.bone_r
+    colors = orig_cmap(np.linspace(min_val, max_val, n))
+    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("mycmap", colors)
+    plot_parameterspace(len(truths), data, truths, chi2, bounds, labels, nu,
+        vmin=0.26, vmax=.7, get_stats=False, cmap=cmap, figsize=(20,20), 
+        title = FILE_PREFIX.replace('_', ' '),
+        savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_params_space.png')
+
+    # plot the best fit image and residuals
+    BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_2.0/')[0]
+    make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, 
+                            title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
+                            savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png')
+
+    print("FINISHED!")
