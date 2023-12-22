@@ -36,9 +36,7 @@ import disk_convolution as dc
 def make_mcfost_model(SAVE_DIR, WAVELENGTH, INITIAL_PARAM_FILE, FILE_PREFIX, paramsdict):
     '''
     '''
-    # paramsdict = {'inclinations':[i], 'scale_height':[H0], 'dust_mass':[Md], 'surface_density':[beta], 'flaring':[f], 'dust_amin':[amin], 'dust_exponent':[aexp], 'dust_porosity':[porosity], 'dust_settling':[dustset], 'alpha_viscosity':[a_visc]}
-
-    paraPath_hash =  SAVE_DIR + '/bestfit_model/'
+    paraPath_hash =  SAVE_DIR + '/mcfost_models/bestfit_model/'
 
     if os.path.exists(paraPath_hash):
         shutil.rmtree(paraPath_hash)
@@ -53,23 +51,23 @@ def make_mcfost_model(SAVE_DIR, WAVELENGTH, INITIAL_PARAM_FILE, FILE_PREFIX, par
                           filename_prefix=FILE_PREFIX,
                           start_counter='best_model') # , 
                           
-    os.chdir(SAVE_DIR + '/bestfit_model/')
+    os.chdir(SAVE_DIR + '/mcfost_models/bestfit_model/')
     mod = f'{FILE_PREFIX}_best_model.para'
 
     print('running model')
     subprocess.call(f'mcfost {mod} -img {WAVELENGTH} -only_scatt >> {FILE_PREFIX}_imagemcfostout.txt', shell = True)
     
     # add a backup
-    if not os.path.exists(SAVE_DIR + f'/bestfit_model/data_{WAVELENGTH}/RT.fits.gz'):
+    if not os.path.exists(SAVE_DIR + f'/mcfost_models/bestfit_model/data_{WAVELENGTH}/RT.fits.gz'):
         subprocess.call(f'mcfost {mod} -img {WAVELENGTH} -only_scatt >> {FILE_PREFIX}_imagemcfostout.txt', shell = True)
     
     os.chdir(owd)
 
-    return SAVE_DIR + f'/bestfit_model/data_{WAVELENGTH}/RT.fits.gz'
+    return SAVE_DIR + f'/mcfost_models/bestfit_model/data_{WAVELENGTH}/RT.fits.gz'
     
 
 ########################################################
-def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITIAL_PARAM_FILE, FILE_PREFIX, INSTRUMENT, DISTANCE_STAR, MASK,
+def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITIAL_PARAM_FILE, FILE_PREFIX, INSTRUMENT, DISTANCE_STAR, MASK, ROLL_REF_ANGLE, OBJ_INFO, FILTER,
          obsdate, grid_shape, bestparams_dict, amplitude):
     """ 
     Parameters:
@@ -78,15 +76,9 @@ def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITI
     Returns:
         Chi2
     """
-    # obsdate='2023-08-24T22:49:38.762'
-    # grid_shape='circle'
-    # filt = 'F200W'
 
-    inst, tel_point, obj_params = dc.make_psfs(WAVELENGTH, obsdate=obsdate)
+    inst, tel_point, obj_params = dc.make_psfs(ROLL_REF_ANGLE, OBJ_INFO, FILTER, obsdate=obsdate)
     hdul_psfs = dc.make_psfgrid(inst, tel_point, grid_shape=grid_shape)
-
-    # i, H, Md, beta, f, amin, aexp, porosity, dustset, a_visc, amplitude = x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8], x[9], x[10]
-    # dustset = int(round(dustset,0))
 
     print('making model!')
     if WAVELENGTH == 'F200W':
@@ -100,7 +92,7 @@ def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITI
     if INSTRUMENT == 'NIRCam': 
         model_here_convolved = dc.convolve_disk(inst, tel_point, obj_params, hdul_psfs, model_gz, modelpixelscale, wv, DISTANCE_STAR)
         pad = (REDUCED_DATA.shape[0]//2) - (model_here_convolved.shape[0]//2)
-        model_here_convolved = np.pad(model_here_convolved, pad) #160 mJy/as2
+        model_here_convolved = np.pad(model_here_convolved, pad) 
         if model_here_convolved.shape[0] != REDUCED_DATA.shape[0]:
             raise ValueError('something wrong with padding')
     else: # still needs to be regridded to right pixel scale
@@ -138,7 +130,7 @@ def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITI
     chi2 = (1./v) * np.nansum(((data - mod) / noise)**2.)
     hdr = fits.getheader(model_gz)
     for key in bestparams_dict:
-        hdr[key] = bestparams_dict[key]
+        hdr[key] = bestparams_dict[key][0]
     hdr['AMP'] = amplitude
     hdr['CHI2'] = chi2
     fits.writeto(os.path.dirname(model_gz) + '/diskfm.fits', model_fits,header=hdr, overwrite=True)
@@ -156,7 +148,7 @@ def initialize_diskfm(INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA):
     model_here_convolved = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_FirstModelConvolved.fits')
     pad = (REDUCED_DATA.shape[0]//2) - (model_here_convolved.shape[0]//2)
     model_here_convolved = np.pad(model_here_convolved, pad, constant_values=np.nan) 
-    logging.info('model opened .. starting DiskFM')
+    print('model opened .. starting DiskFM')
     diskobj = DiskFM(None,
                      numbasis,
                      None,
@@ -165,7 +157,7 @@ def initialize_diskfm(INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA):
                      load_from_basis=True)
     # test the diskFM object
     diskobj.update_disk(model_here_convolved)
-    logging.info('done diskfM')
+    print('done diskfM')
 
     return diskobj
 

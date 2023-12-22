@@ -25,6 +25,8 @@ import math as mt
 import numpy as np  
 import pandas as pd 
 
+import numpy.ma as ma
+
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -145,7 +147,7 @@ def fobj(x):
     if INSTRUMENT == 'NIRCam': 
         model_here_convolved = dc.convolve_disk(inst, tel_point, obj_params, hdul_psfs, model_gz, modelpixelscale, WAVELENGTH, DISTANCE_STAR)
         pad = (REDUCED_DATA.shape[0]//2) - (model_here_convolved.shape[0]//2)
-        model_here_convolved = np.pad(model_here_convolved, pad) #160 mJy/as2
+        model_here_convolved = np.pad(model_here_convolved, pad)
         if model_here_convolved.shape[0] != REDUCED_DATA.shape[0]:
             raise ValueError('something wrong with padding')
     else: # NOTE: still needs to be regridded to right pixel scale
@@ -196,7 +198,7 @@ def fobj(x):
     if SAVE: #if its the best fit model, save it, otherwise, delete the folder with fits files to save space
         hdr = fits.getheader(model_gz)
         for key in data_dict:
-            hdr[key] = data_dict[key]
+            hdr[key] = data_dict[key][0]
         fits.writeto(os.path.dirname(model_gz) + '/diskfm.fits', model_fits,header=hdr, overwrite=True)
     else: # delete fits files and folder  
         logging.info('deleting folder: ' + file_path.split('/')[-2])
@@ -278,6 +280,7 @@ labels = params_de_yaml['LABELS'] # labels for corner plot
 
 MASK = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_MASK.fits') # mask for calculating chi2
 nu = np.count_nonzero(MASK)-len(bounds) # nu for chi2 calculation
+MASK = ma.make_mask(MASK)
 
 # make save directory if it does not exist
 if not os.path.exists(SAVE_DIR):
@@ -359,9 +362,10 @@ DE_plot.plot_parameterspace(len(truths), data, truths, chi2, bounds, labels, nu,
      savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_params_space.png')
 
 # plot the best fit image and residuals
-BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_2.0/')[0]
-DE_plot.make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, 
+BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_{WAVELENGTH}/')[0]
+DE_plot.make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, MASK=MASK, 
                           title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
-                          savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png')
+                          savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png',
+                          make_files=False)
 
 logging.info("FINISHED!")

@@ -20,6 +20,7 @@ interval = ZScaleInterval()
 import os
 import copy
 import glob
+import yaml
 
 from scipy import stats
 import scipy.ndimage as ndimage
@@ -32,7 +33,7 @@ import matplotlib.patches as patches
 from matplotlib.colors import Normalize
 import matplotlib.cm as cm
 
-
+import numpy.ma as ma
 import make_bestfit_model as mbm
 from pyklip.fmlib.diskfm import DiskFM
 
@@ -59,6 +60,10 @@ def pull_out_csvparams(FIL, **kwargs):
                 d[name].append(hdr[name].values[0])
         df= pd.DataFrame(d)
         if 'savefig' in kwargs: 
+            if 'Unnamed: 0' in df.columns.to_list():
+                df = df.drop('Unnamed: 0', axis=1)
+            if 'model' in df.columns.to_list():
+                df = df.drop('model', axis=1)
             print('  ==> saving as' + kwargs['savefig'])
             df.to_csv(kwargs['savefig'], index=False)
         
@@ -181,6 +186,8 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
     for i in range(M):
         x = data[datacolnames[i]].to_list()
         ax = axs[i,i]
+        print(label[i])
+        print(np.min(x), np.max(x), np.min(chi2), np.max(chi2))
         bin_means, bin_edges, binnumber = stats.binned_statistic(x,chi2, 'min', bins=bins)
         bin_width = (bin_edges[1] - bin_edges[0])
         bin_centers = bin_edges[1:] - bin_width/2
@@ -194,15 +201,24 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
         ax.tick_params(which='both', direction='in', top=True, right=True, left=True, bottom=True, labelsize=14)
         ax.minorticks_on()
 
-        if '(deg)' in label[i]:
-            lab = label[i].split(' (deg)')[0]
-            ax.set_title(lab + ' = ' + str(round(truths[i],2)) + '$^\circ$', fontsize=14)
-        elif '(AU)' in label[i]:
-            lab = label[i].split(' (AU)')[0]
-            ax.set_title(lab + ' = ' + str(round(truths[i],2)) + ' AU', fontsize=14)
+        if 'e' in str(truths[i]):
+            truth_val = '{:0.2e}'.format(truths[i])
         else:
-            lab = label[i]
-            ax.set_title(lab + ' = ' + str(round(truths[i],2)), fontsize=14)
+            truth_val = str(round(truths[i],2))
+
+        if '(deg)' in label[i]:
+            lab = label[i].split(' (deg)')[0].replace(r'\n', '\n')
+            ax.set_title(lab + ' = ' + truth_val + '$^\circ$', fontsize=14)
+        elif '(AU)' in label[i]:
+            lab = label[i].split(' (AU)')[0].replace(r'\n', '\n')
+            ax.set_title(lab + ' = ' + truth_val + ' AU', fontsize=14)
+        elif 'dust settling' in label[i]:
+            lab = label[i].replace(r'\n', '\n')
+            ax.set_title(lab + ' = ' + str(round(float(truth_val),0)), fontsize=14)
+        else:
+            lab = label[i].replace(r'\n', '\n')
+
+            ax.set_title(lab + ' = ' + truth_val, fontsize=14)
         ax.set_xlim(rang[i])
         horline = np.nanmean(bin_means) + np.sqrt(2/nu)
         ax.axhline(horline, color='k', linestyle='--')
@@ -233,9 +249,9 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
                 ax.set_yticklabels([])
 
             if i == 0:
-                ax.set_ylabel(label[j], fontsize=14)
+                ax.set_ylabel(label[j].replace(r'\n', '\n'), fontsize=14)
             if j == M-1:
-                ax.set_xlabel(label[i], fontsize=14)
+                ax.set_xlabel(label[i].replace(r'\n', '\n'), fontsize=14)
             ax.tick_params(which='both', direction='in', top=True, right=True, labelsize=14)
             ax.minorticks_on()
             
@@ -251,51 +267,63 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
     plt.show()
 
 
-def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, INITIAL_PARAMS=None, INSTRUMENT=None, DISTANCE_STAR=None, MASK=None, obsdate=None, grid_shape=None, bestparams_dict=None, amplitude=None, **kwargs):
+def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX,
+                      MASK=None, 
+                      yaml_paramater_file = None, make_files=False,
+                      bestparams_dict=None, amplitude=None, **kwargs):
     '''
     plot the best fit model found in DiskDiffEvo.  
 
     Parameter:
         MCFOST_DIR : str - path to where mcfost code is ran. 
         BESTMOD_DIR : str - path to best fit model
-        REDUCED_DATA : str - path to original reduced data
-        NOISE : str - path to original std annulus noise data
+        REDUCED_DATA : array - original reduced data
+        NOISE : array - original std annulus noise data
         WAVELENGTH : str - instrument filter name
         FILE_PREFIX : str - prefix used for initial files 
-        MASK : str - path to fits file for mask
+        MASK : array - fits file for mask
 
         JUST IF YOU NEED TO CREATE THE FILES FROM SCATCH
-            INITIAL_PARAMS : str - name of the initial MCFOST .para file 
-            INSTRUMENT : str - name of instrument 
-            DISTANCE_STAR : float/int - distance to star in pc
-            obsdate : observation date
-            grid_shape : shape to make PSF grid
-            bestparams_dict : dictionary - dictionary of params for making PSF grid
+            yaml_paramater_file : str - yaml parameter file to create models
+            make_files : boolean - determine if you need to make the best fit model (default=False)
+            bestparams_dict : dictionary - dictionary of params for making best fit model
             amplitude : float - best fit amplitude to scale model
                
         optional:
-            make_files : boolean - determine if you need to make the best fit model (default=True)
             title : str - time of plot
             savefig : str - outfile name to save corner plot
     '''
-    
-    if kwargs.get('make_files'): 
-        DISKOBJ = mbm.initialize_diskfm(os.path.dirname(MCFOST_DIR), FILE_PREFIX, REDUCED_DATA)
-        BESTMOD_DIR = mbm.make_bestfit_model(MCFOST_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITIAL_PARAMS, FILE_PREFIX, INSTRUMENT, DISTANCE_STAR, MASK, obsdate, grid_shape, bestparams_dict, amplitude)
+
+    if make_files: 
+        with open(yaml_paramater_file, 'r') as yaml_file:
+            params_de_yaml = yaml.safe_load(yaml_file)
+        INITIALIZE_DIR = params_de_yaml['INITIALIZE_DIR']
+        INITIAL_PARAMS = INITIALIZE_DIR + '/' + params_de_yaml['INITIAL_PARA'] # initial .para file
+        INSTRUMENT = params_de_yaml['INSTRUMENT']
+        DISTANCE_STAR = params_de_yaml['DISTANCE_STAR']
+        obsdate = params_de_yaml['obsdate']
+        grid_shape = params_de_yaml['grid_shape']
+        ROLL_REF_ANGLE = params_de_yaml['ROLL_REF_ANGLE']
+        OBJ_INFO = params_de_yaml['OBJ_INFO']
+        FILTER = params_de_yaml['FILTER']
+        DISKOBJ = mbm.initialize_diskfm(INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA)
+        BESTMOD_DIR = mbm.make_bestfit_model(MCFOST_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITIAL_PARAMS, FILE_PREFIX, INSTRUMENT, DISTANCE_STAR, MASK, 
+                                             ROLL_REF_ANGLE, OBJ_INFO, FILTER, obsdate, grid_shape, bestparams_dict, amplitude)
 
     else:
         print('   ==> using existing fits files')
     if WAVELENGTH=='F200W':
         fold = 'F200W'
-        conv_mod = FILE_PREFIX + '_mJyas2.fits'
+        conv_mod =  'RT_model_NRCA2_MASK335R_F200W_mJyas2.fits'
     else:
+        conv_mod = 'RT_model_NRCA5_MASK335R_F444W_mJyas2.fits'
         fold = 'F444W'
 
-    hdr = fits.getheader(BESTMOD_DIR + 'diskfm.fits')
-    disk_ml_FM = fits.getdata(BESTMOD_DIR + 'diskfm.fits') 
+    hdr = fits.getheader(os.path.join(BESTMOD_DIR + 'diskfm.fits'))
+    disk_ml_FM = fits.getdata(os.path.join(BESTMOD_DIR + 'diskfm.fits'))
 
-    disk_model_mJy_px = fits.getdata(BESTMOD_DIR + 'RT_mJypx.fits')
-    modhdr = fits.getheader(BESTMOD_DIR + 'RT_mJypx.fits')
+    disk_model_mJy_px = fits.getdata(os.path.join(BESTMOD_DIR + 'RT_mJypx.fits'))
+    modhdr = fits.getheader(os.path.join(BESTMOD_DIR + 'RT_mJypx.fits'))
     if 'CDELT2' not in modhdr:
         modelpixelscale = 1.722528E-05
     else:
@@ -313,6 +341,7 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
 
     residuals = REDUCED_DATA - modeldisk
     snr_residuals = (REDUCED_DATA - modeldisk) / NOISE
+    
     if MASK is not None:
         residuals[MASK]=np.nan
         snr_residuals[MASK]=np.nan
@@ -400,42 +429,99 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     plt.show()
 
 
-def run_doplot(yaml_paramater_file=None, SAVE_DIR=None, FILE_PREFIX=None, REDUCED_DATA=None, NOISE=None, WAVELENGTH=None, bounds=None, labels=None, nu=None, clean_up=False):
-    if yaml_paramater_file is not None:
-        with open(yaml_paramater_file, 'r') as yaml_file:
-            params_de_yaml = yaml.safe_load(yaml_file)
+def run_doplot(yaml_paramater_file, make_files=False, **kwargs):
+    #######################
+    with open(yaml_paramater_file, 'r') as yaml_file:
+        params_de_yaml = yaml.safe_load(yaml_file)
 
-        SAVE_DIR = params_de_yaml['SAVE_DIR']
-        FILE_PREFIX = params_de_yaml['FILE_PREFIX']   # name of level 2 data - roll 9
-        REDUCED_DATA = params_de_yaml['REDUCED_DATA']
-        NOISE = params_de_yaml['NOISE']
-        WAVELENGTH = params_de_yaml['WAVELENGTH']
-        bounds = params_de_yaml['bounds']
-        labels = params_de_yaml['labels']
-        nu = params_de_yaml['nu']
-        clean_up = params_de_yaml['CLEAN_UP']
-    
+    SAVE_DIR = params_de_yaml['SAVE_DIR']
+    FILE_PREFIX = params_de_yaml['FILE_PREFIX']   # name of level 2 data - roll 9
+    REDUCEDDATA_DIR = params_de_yaml['REDUCEDDATA_DIR']
+    NOISE_DIR = params_de_yaml['NOISE_DIR']
+    WAVELENGTH = params_de_yaml['WAVELENGTH']
+    bounds = params_de_yaml['BOUNDS']
+    labels = list(params_de_yaml['LABELS'].values())
+    INITIALIZE_DIR = params_de_yaml['INITIALIZE_DIR']
+    MASK = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_MASK.fits') # mask for calculating chi2
+    nu = np.count_nonzero(MASK)-len(bounds)
+    MASK = ma.make_mask(MASK)
+    clean_up = params_de_yaml['CLEAN_UP']
+
+    pyklip_frame = params_de_yaml['PYKLIP_FRAME'] # # image to use if data has more than one extension
+    REDUCED_DATA_MJYSR = fits.getdata(REDUCEDDATA_DIR + '/' + params_de_yaml['REDUCED_DATA'])[pyklip_frame]  
+    # convert to mJy/as2
+    REDUCED_DATA_MJYSR = REDUCED_DATA_MJYSR * u.MJy/u.steradian
+    REDUCED_DATA = REDUCED_DATA_MJYSR.to(u.mJy/u.arcsecond**2)
+    REDUCED_DATA = REDUCED_DATA.value
+
+    # # load noise and make it global
+    NOISE_MJYSR = fits.getdata(NOISE_DIR + '/' + params_de_yaml['NOISE']) # this is the ANNULUS STD NOISE
+    # convert to mJy/as2
+    NOISE_MJYSR = NOISE_MJYSR * u.MJy/u.steradian
+    NOISE = NOISE_MJYSR.to(u.mJy/u.arcsecond**2)
+    NOISE = NOISE.value
+    #######################
+
+    param_plot = kwargs.get('param_plot', True)
+    model_plot =  kwargs.get('model_plot', True)
+    if kwargs.get('do_all'):
+        param_plot = True
+        model_plot = True
+
     # do plotting and main .csv filing
     print('starting plotting')
     # extract all parameters from .csv file and put them into 1 file.  if clean_up=True, the original .csv files will be deleted leaving only the combined file. 
-    FIL = glob.glob(SAVE_DIR + '/*.csv')
-    data, chi2, truths, MCFOST_DIR = pull_out_csvparams(FIL, all_csv=True, savefig = os.path.dirname(SAVE_DIR) + f'/FINAL_DEchi2_{FILE_PREFIX}.csv', clean_up=clean_up)
 
-    # plot a corner plot of the parameter space
-    min_val, max_val = 0.03,0.99
-    n = 6
-    orig_cmap = plt.cm.bone_r
-    colors = orig_cmap(np.linspace(min_val, max_val, n))
-    cmap = matplotlib.colors.LinearSegmentedColormap.from_list("mycmap", colors)
-    plot_parameterspace(len(truths), data, truths, chi2, bounds, labels, nu,
-        vmin=0.26, vmax=.7, get_stats=False, cmap=cmap, figsize=(20,20), 
-        title = FILE_PREFIX.replace('_', ' '),
-        savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_params_space.png')
+    savefil = os.path.dirname(SAVE_DIR) + f'/FINAL_DEchi2_{FILE_PREFIX}.csv'
+    if os.path.isfile(savefil):
+        FIL = savefil
+        all_csv = False
+    else:
+        FIL = glob.glob(SAVE_DIR + '/*.csv')
+        all_csv = True
+    data, chi2, truths, MCFOST_DIR = pull_out_csvparams(FIL, all_csv=all_csv, savefig = savefil, clean_up=clean_up)
 
-    # plot the best fit image and residuals
-    BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_2.0/')[0]
-    make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, 
-                            title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
-                            savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png')
+
+    #######################
+    if param_plot:
+        # plot a corner plot of the parameter space
+        min_val, max_val = 0.03,0.99
+        n = 6
+        orig_cmap = plt.cm.bone_r
+        colors = orig_cmap(np.linspace(min_val, max_val, n))
+        cmap = matplotlib.colors.LinearSegmentedColormap.from_list("mycmap", colors)
+        plot_parameterspace(len(truths), data, truths, chi2, list(bounds.values()), labels, nu,
+            vmin=2.6, vmax=2.8, get_stats=False, cmap=cmap, figsize=(20,20), 
+            title = FILE_PREFIX.replace('_', ' '),
+            savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_params_space.png')
+
+    #######################
+    if model_plot:
+        # plot the best fit image and residuals
+        BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_{WAVELENGTH}/')[0]
+        if make_files:
+            GRIDGEN_DICT = params_de_yaml['GRIDGEN_DICT']
+            bestparams_dict = {}
+            for i, v in enumerate(GRIDGEN_DICT):
+                if 'dust_settling' in v:
+                    truth_val = int(round(truths[i],0))
+                else:
+                    truth_val = truths[i]
+                bestparams_dict[v] = [truth_val]
+            amplitude = truths[-1]
+        
+            make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, 
+                            REDUCED_DATA, NOISE,
+                            WAVELENGTH, FILE_PREFIX, MASK, 
+                            yaml_paramater_file=yaml_paramater_file, make_files=make_files,
+                            bestparams_dict=bestparams_dict, amplitude=amplitude, 
+                            title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png'
+                            )
+        else:
+            make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, MASK=MASK,
+                        title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
+                                savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png', 
+                                make_files=make_files)
+
 
     print("FINISHED!")
