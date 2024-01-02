@@ -15,6 +15,7 @@ from astropy.convolution import convolve
 from astropy import constants as const
 from astropy import units as u
 from astropy.visualization import simple_norm, ZScaleInterval
+from astropy.table import QTable
 interval = ZScaleInterval()
 
 import os
@@ -183,11 +184,15 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
     norm = Normalize(vmin=kwargs['vmin'], vmax=kwargs['vmax'])
 
     bins = 6
+    name, minx, maxy, minchi2, maxchi2, horline = [],[],[],[],[],[]
     for i in range(M):
         x = data[datacolnames[i]].to_list()
         ax = axs[i,i]
-        print(label[i])
-        print(np.min(x), np.max(x), np.min(chi2), np.max(chi2))
+        name.append(datacolnames[i])
+        minx.append(round(np.min(x),2))
+        maxy.append(round(np.max(x),2))
+        minchi2.append(round(np.min(chi2),2))
+        maxchi2.append(round(np.max(chi2),2))
         bin_means, bin_edges, binnumber = stats.binned_statistic(x,chi2, 'min', bins=bins)
         bin_width = (bin_edges[1] - bin_edges[0])
         bin_centers = bin_edges[1:] - bin_width/2
@@ -220,10 +225,15 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
 
             ax.set_title(lab + ' = ' + truth_val, fontsize=14)
         ax.set_xlim(rang[i])
-        horline = np.nanmean(bin_means) + np.sqrt(2/nu)
-        ax.axhline(horline, color='k', linestyle='--')
-        ax.set_ylim(np.nanmean(bin_means)-0.1, np.nanmax(bin_means)+0.05)
-        
+        hline = np.nanmean(bin_means) + np.sqrt(2/nu)
+        horline.append(round(hline,2))
+        ax.axhline(hline, color='k', linestyle='--')
+        ylim_min = kwargs.get('ylim_min', np.nanmin(bin_means)+0.1)
+        ax.set_ylim(ylim_min, np.nanmax(bin_means)+0.05)
+    t = QTable([name, minx, maxy, minchi2, maxchi2, horline],
+               names = ('name', 'min(x)', 'max(x)', 'min(chi2)', 'max(chi2)', 'horline'))
+    print(t)
+
     for j in range(M):
         for i in range(j):
             x = data[datacolnames[j]].to_list()
@@ -321,6 +331,11 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
 
     hdr = fits.getheader(os.path.join(BESTMOD_DIR + 'diskfm.fits'))
     disk_ml_FM = fits.getdata(os.path.join(BESTMOD_DIR + 'diskfm.fits'))
+    
+    ####
+    bkg = np.mean(disk_ml_FM[200:240, 200:240])
+    disk_ml_FM=disk_ml_FM-bkg
+    ####
 
     disk_model_mJy_px = fits.getdata(os.path.join(BESTMOD_DIR + 'RT_mJypx.fits'))
     modhdr = fits.getheader(os.path.join(BESTMOD_DIR + 'RT_mJypx.fits'))
@@ -355,11 +370,19 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     halfsize = np.asarray(modeldisk.shape[-2:]) / 2 * pix_scale
     extent = [halfsize[0], -halfsize[0], -halfsize[1], halfsize[1]]
 
+    stretch = kwargs.get('stretch', 'sqrt')
+    vmin = kwargs.get('vmin', 0)
+    vmax = kwargs.get('vmax', 0.5)
+    origvmin = kwargs.get('origvmin', vmin)
+    origvmax = kwargs.get('origvmax', vmax)
+    resvmin = kwargs.get('resvmin', -vmax)
+    resvmax = kwargs.get('resvmax', vmax)
+
     fig, ((ax1, ax2, ax3),(ax4,ax5, ax6)) = plt.subplots(figsize=(8,5), nrows=2, ncols=3, dpi=150)
     
     # FIG 1 The model
-    img = disk_model_mJy_as2 #ndimage.gaussian_filter(disk_model_mJy_as2, sigma=1, order=0)
-    norm = simple_norm(img, 'sqrt', min_cut=0, max_cut=2e-5)
+    img = disk_model_mJy_as2 
+    norm = simple_norm(img, 'sqrt', min_cut=origvmin, max_cut=origvmax)
     print(np.nanmax(img))
     cax = ax1.imshow(img, origin='lower', extent=extent, cmap='inferno', norm=norm)
     ax1.set_title("Best Model", fontsize=caracsize, pad=caracsize / 3.)
@@ -369,22 +392,22 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     ax1.axis('off')
     
     #FIG 2 The FM convolved model
-    norm = simple_norm(modeldisk, 'sqrt', min_cut=0, max_cut=.5, invalid=0)
+    norm = simple_norm(modeldisk, stretch, min_cut=vmin, max_cut=vmax, invalid=0)
     cax = ax2.imshow(modeldisk, origin='lower', extent=extent, norm=norm, cmap='magma')
     ax2.set_title("Model Convolved + FM", fontsize=caracsize, pad=caracsize / 3.)
     cbar = fig.colorbar(cax,ax=ax2, fraction=0.046, pad=0.04)
     cbar.ax.tick_params(labelsize=caracsize * 3 / 4., length=3)
     cbar.minorticks_off()
-    ax2.axis('off')
+    # ax2.axis('off')
     
     #FIG 3 The residuals
-    cax = ax3.imshow(residuals, origin='lower', extent=extent, vmin=-.5, vmax=.5, cmap=cmap)
+    cax = ax3.imshow(residuals, origin='lower', extent=extent, vmin=resvmin, vmax=resvmax, cmap=cmap)
     ax3.set_title("Residuals", fontsize=caracsize, pad=caracsize / 3.)
     cbar = fig.colorbar(cax,ax=ax3, fraction=0.046, pad=0.04)
     cbar.ax.tick_params(labelsize=caracsize * 3 / 4., length=3)
 
     #FIG 4 convolved model
-    norm = simple_norm(convovleddisk, 'sqrt', min_cut=0, max_cut=.5, invalid=0)
+    norm = simple_norm(convovleddisk, stretch, min_cut=vmin, max_cut=vmax, invalid=0)
     cax = ax4.imshow(convovleddisk, origin='lower',extent=extent, cmap='magma', norm=norm)
     ax4.set_title("Model Convolved", fontsize=caracsize, pad=caracsize / 3.)
     cbar = fig.colorbar(cax, ax=ax4, fraction=0.046, pad=0.04)
@@ -393,7 +416,7 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     ax4.axis('off')
     
     #FIG 5 The data
-    norm = simple_norm(REDUCED_DATA, 'sqrt', min_cut=0, max_cut=.5, invalid=0)
+    norm = simple_norm(REDUCED_DATA, stretch, min_cut=vmin, max_cut=vmax, invalid=0)
     cax = ax5.imshow(REDUCED_DATA, origin='lower', extent=extent, cmap='magma', norm=norm)
     ax5.set_title("KLIP reduced data", fontsize=caracsize, pad=caracsize / 3.)
     cbar = fig.colorbar(cax,ax=ax5, fraction=0.046, pad=0.04)
@@ -429,7 +452,7 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     plt.show()
 
 
-def run_doplot(yaml_paramater_file, make_files=False, **kwargs):
+def run_doplot(yaml_paramater_file, make_files=False, paramplot_kw=None, modelplot_kw=None, **kwargs, ):
     #######################
     with open(yaml_paramater_file, 'r') as yaml_file:
         params_de_yaml = yaml.safe_load(yaml_file)
@@ -490,10 +513,13 @@ def run_doplot(yaml_paramater_file, make_files=False, **kwargs):
         orig_cmap = plt.cm.bone_r
         colors = orig_cmap(np.linspace(min_val, max_val, n))
         cmap = matplotlib.colors.LinearSegmentedColormap.from_list("mycmap", colors)
+
+        print('min/max chi2: ', np.nanmin(chi2), '/', np.nanmax(chi2))
         plot_parameterspace(len(truths), data, truths, chi2, list(bounds.values()), labels, nu,
-            vmin=2.6, vmax=2.8, get_stats=False, cmap=cmap, figsize=(20,20), 
+            get_stats=False, cmap=cmap, figsize=(20,20), 
             title = FILE_PREFIX.replace('_', ' '),
-            savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_params_space.png')
+            savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_params_space.png', **paramplot_kw
+            )
 
     #######################
     if model_plot:
@@ -515,13 +541,13 @@ def run_doplot(yaml_paramater_file, make_files=False, **kwargs):
                             WAVELENGTH, FILE_PREFIX, MASK, 
                             yaml_paramater_file=yaml_paramater_file, make_files=make_files,
                             bestparams_dict=bestparams_dict, amplitude=amplitude, 
-                            title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png'
+                            title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png', **modelplot_kw
                             )
         else:
             make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, MASK=MASK,
                         title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
                                 savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png', 
-                                make_files=make_files)
+                                make_files=make_files, **modelplot_kw)
 
 
     print("FINISHED!")

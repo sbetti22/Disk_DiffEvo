@@ -276,7 +276,7 @@ NOISE = NOISE.value
 bounds = list(params_de_yaml['BOUNDS'].values())  # initial bounds
 csv_names = list(params_de_yaml['BOUNDS'].keys())  # name of bounds to save in csv file
 gridgenerator_names = params_de_yaml['GRIDGEN_DICT'] # name of free parameters for gridgenerator in mcfost/paramfile.py
-labels = params_de_yaml['LABELS'] # labels for corner plot 
+labels = list(params_de_yaml['LABELS'].values()) # labels for corner plot 
 
 MASK = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_MASK.fits') # mask for calculating chi2
 nu = np.count_nonzero(MASK)-len(bounds) # nu for chi2 calculation

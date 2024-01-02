@@ -135,7 +135,7 @@ def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITI
     hdr['CHI2'] = chi2
     fits.writeto(os.path.dirname(model_gz) + '/diskfm.fits', model_fits,header=hdr, overwrite=True)
 
-    return os.path.dirname(model_gz)
+    return os.path.dirname(model_gz) + '/'
 
 ########################################################
 def initialize_diskfm(INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA):
