@@ -35,7 +35,7 @@ The initial files should be:
 
 NOTE: as of 12/20/2023, convolving with a non-NIRCam PSF does not rebin into the correct pixel size.  
 
-Within `DiskDiffEvo.py`, the `make_model()` function will call the MCFOST generator from: https://github.com/mperrin/mcfost-python.  All you need is the `utils.py` and `paramfile.py`.  The folder called mcfost with the `paramfile.py` module MUST be in the same folder as this code to run! 
+Within `DiskDiffEvo.py`, the `make_model()` function will call the MCFOST generator from: https://github.com/mperrin/mcfost-python.  All you need is the `__init__.py`, `utils.py` and `paramfile.py`.  The folder called mcfost with the `paramfile.py` module MUST be in the same folder as this code to run! 
 
 If you get an error "Don't know how to set a parameter named XX", then go to `paramfile/set_parameter()`, and add a new elif statement to call that parameter
 
