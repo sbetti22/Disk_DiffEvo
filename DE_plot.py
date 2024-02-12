@@ -225,11 +225,12 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
 
             ax.set_title(lab + ' = ' + truth_val, fontsize=14)
         ax.set_xlim(rang[i])
-        hline = np.nanmean(bin_means) + np.sqrt(2/nu)
+        hline = bin_means.min() + np.sqrt(2/nu)
         horline.append(round(hline,2))
         ax.axhline(hline, color='k', linestyle='--')
         ylim_min = kwargs.get('ylim_min', np.nanmin(bin_means)+0.1)
-        ax.set_ylim(ylim_min, np.nanmax(bin_means)+0.05)
+        ylim_max = kwargs.get('ylim_max', np.nanmax(bin_means)+0.05)
+        ax.set_ylim(ylim_min, ylim_max)
     t = QTable([name, minx, maxy, minchi2, maxchi2, horline],
                names = ('name', 'min(x)', 'max(x)', 'min(chi2)', 'max(chi2)', 'horline'))
     print(t)
@@ -277,7 +278,7 @@ def plot_parameterspace(M, data, truths, chi2, bounds, colnames, nu, **kwargs):
     plt.show()
 
 
-def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX,
+def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, FILTER, FILE_PREFIX,
                       MASK=None, 
                       yaml_paramater_file = None, make_files=False,
                       bestparams_dict=None, amplitude=None, **kwargs):
@@ -289,7 +290,7 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
         BESTMOD_DIR : str - path to best fit model
         REDUCED_DATA : array - original reduced data
         NOISE : array - original std annulus noise data
-        WAVELENGTH : str - instrument filter name
+        FILTER : str - instrument filter name
         FILE_PREFIX : str - prefix used for initial files 
         MASK : array - fits file for mask
 
@@ -315,14 +316,15 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
         grid_shape = params_de_yaml['grid_shape']
         ROLL_REF_ANGLE = params_de_yaml['ROLL_REF_ANGLE']
         OBJ_INFO = params_de_yaml['OBJ_INFO']
-        FILTER = params_de_yaml['FILTER']
-        DISKOBJ = mbm.initialize_diskfm(INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA)
+        WAVELENGTH = params_de_yaml['WAVELENGTH']
+        KLBASIS = params_de_yaml['KLBASIS']
+        DISKOBJ = mbm.initialize_diskfm(KLBASIS, INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA)
         BESTMOD_DIR = mbm.make_bestfit_model(MCFOST_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITIAL_PARAMS, FILE_PREFIX, INSTRUMENT, DISTANCE_STAR, MASK, 
                                              ROLL_REF_ANGLE, OBJ_INFO, FILTER, obsdate, grid_shape, bestparams_dict, amplitude)
 
     else:
         print('   ==> using existing fits files')
-    if WAVELENGTH=='F200W':
+    if FILTER=='F200W':
         fold = 'F200W'
         conv_mod =  'RT_model_NRCA2_MASK335R_F200W_mJyas2.fits'
     else:
@@ -354,8 +356,8 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     convovleddisk = np.copy(disk_ml_convolved)
     origdisk = np.copy(disk_model_mJy_as2)
 
-    residuals = REDUCED_DATA - modeldisk
-    snr_residuals = (REDUCED_DATA - modeldisk) / NOISE
+    residuals = REDUCED_DATA - (modeldisk)
+    snr_residuals = (REDUCED_DATA - (modeldisk)) / NOISE
     
     if MASK is not None:
         residuals[MASK]=np.nan
@@ -398,7 +400,7 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     cbar = fig.colorbar(cax,ax=ax2, fraction=0.046, pad=0.04)
     cbar.ax.tick_params(labelsize=caracsize * 3 / 4., length=3)
     cbar.minorticks_off()
-    # ax2.axis('off')
+    ax2.axis('off')
     
     #FIG 3 The residuals
     cax = ax3.imshow(residuals, origin='lower', extent=extent, vmin=resvmin, vmax=resvmax, cmap=cmap)
@@ -436,13 +438,13 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
         ax.set_ylim(-5,5)
         cbar.minorticks_off()
         c = plt.Circle((0,0), .8, color='k')
-        ax.add_artist(c)
+        # ax.add_artist(c)
 
     for ax in [ax3,ax6]:
         ax.axes.xaxis.set_visible(False)
         ax.axes.yaxis.set_visible(False)
      
-    title = kwargs.get('title', str(WAVELENGTH))
+    title = kwargs.get('title', str(FILTER))
     fig.suptitle(title)
     plt.subplots_adjust(top=0.8)
     fig.tight_layout()
@@ -452,21 +454,21 @@ def make_final_images(MCFOST_DIR, BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, 
     plt.show()
 
 
-def run_doplot(yaml_paramater_file, make_files=False, paramplot_kw=None, modelplot_kw=None, **kwargs, ):
+def run_doplot(yaml_paramater_file, make_files=False, paramplot_kw=None, modelplot_kw=None, amplitude=1, **kwargs, ):
     #######################
     with open(yaml_paramater_file, 'r') as yaml_file:
         params_de_yaml = yaml.safe_load(yaml_file)
-
-    SAVE_DIR = params_de_yaml['SAVE_DIR']
+    SAVE_DIR = kwargs.get('SAVE_DIR', params_de_yaml['SAVE_DIR'])
     FILE_PREFIX = params_de_yaml['FILE_PREFIX']   # name of level 2 data - roll 9
     REDUCEDDATA_DIR = params_de_yaml['REDUCEDDATA_DIR']
     NOISE_DIR = params_de_yaml['NOISE_DIR']
-    WAVELENGTH = params_de_yaml['WAVELENGTH']
+    WAVELENGTH = params_de_yaml['WAVELENGTH'] # number
+    FILTER = params_de_yaml['FILTER'] # string ie. F200W
     bounds = params_de_yaml['BOUNDS']
     labels = list(params_de_yaml['LABELS'].values())
     INITIALIZE_DIR = params_de_yaml['INITIALIZE_DIR']
     MASK = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_MASK.fits') # mask for calculating chi2
-    nu = np.count_nonzero(MASK)-len(bounds)
+    nu = np.count_nonzero(MASK==0)-len(bounds)
     MASK = ma.make_mask(MASK)
     clean_up = params_de_yaml['CLEAN_UP']
 
@@ -495,15 +497,18 @@ def run_doplot(yaml_paramater_file, make_files=False, paramplot_kw=None, modelpl
     print('starting plotting')
     # extract all parameters from .csv file and put them into 1 file.  if clean_up=True, the original .csv files will be deleted leaving only the combined file. 
 
-    savefil = os.path.dirname(SAVE_DIR) + f'/FINAL_DEchi2_{FILE_PREFIX}.csv'
-    if os.path.isfile(savefil):
-        FIL = savefil
-        all_csv = False
+    if 'manual_params' in kwargs:
+        print('manual params')
+        truths = kwargs['manual_params']
     else:
-        FIL = glob.glob(SAVE_DIR + '/*.csv')
-        all_csv = True
-    data, chi2, truths, MCFOST_DIR = pull_out_csvparams(FIL, all_csv=all_csv, savefig = savefil, clean_up=clean_up)
-
+        savefil = os.path.dirname(SAVE_DIR) + f'/FINAL_DEchi2_{FILE_PREFIX}.csv'
+        if os.path.isfile(savefil):
+            FIL = savefil
+            all_csv = False
+        else:
+            FIL = glob.glob(SAVE_DIR + '/*.csv')
+            all_csv = True
+        data, chi2, truths, MCFOST_DIR = pull_out_csvparams(FIL, all_csv=all_csv, savefig = savefil, clean_up=clean_up)
 
     #######################
     if param_plot:
@@ -523,28 +528,33 @@ def run_doplot(yaml_paramater_file, make_files=False, paramplot_kw=None, modelpl
 
     #######################
     if model_plot:
-        # plot the best fit image and residuals
-        BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_{WAVELENGTH}/')[0]
+
         if make_files:
+            BESTMOD_DIR = SAVE_DIR
             GRIDGEN_DICT = params_de_yaml['GRIDGEN_DICT']
             bestparams_dict = {}
+            print(truths)
             for i, v in enumerate(GRIDGEN_DICT):
                 if 'dust_settling' in v:
                     truth_val = int(round(truths[i],0))
+                elif 'dust_mass' in v:
+                    truth_val = 10**truths[i]
                 else:
                     truth_val = truths[i]
                 bestparams_dict[v] = [truth_val]
             amplitude = truths[-1]
-        
+            print(amplitude)
             make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, 
                             REDUCED_DATA, NOISE,
-                            WAVELENGTH, FILE_PREFIX, MASK, 
+                            FILTER, FILE_PREFIX, MASK, 
                             yaml_paramater_file=yaml_paramater_file, make_files=make_files,
                             bestparams_dict=bestparams_dict, amplitude=amplitude, 
                             title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png', **modelplot_kw
                             )
         else:
-            make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, MASK=MASK,
+            # plot the best fit image and residuals
+            BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_{WAVELENGTH}/')[0]
+            make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, FILTER, FILE_PREFIX, MASK=MASK,
                         title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
                                 savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png', 
                                 make_files=make_files, **modelplot_kw)

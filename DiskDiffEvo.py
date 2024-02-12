@@ -8,14 +8,14 @@ based off of disk modeling codes by: Johan Mazoyer (https://github.com/johanmazo
 """
 ########################################################
 # CHANGE THIS TO THE PARAMETER FILE YOU WANT TO USE!!
-yaml_paramater_file = 'de_parameter_file.yaml'
+# yaml_paramater_file = '/Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/F200W_modeling/F200W_parameter_file_physical.yaml'
+yaml_paramater_file = '/Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/F444W_modeling/F444W_parameter_file_physical.yaml'
+
 ########################################################
 
 import os
 import glob
 import yaml
-import logging
-logging = logging.getLogger('diffevo')
 
 import multiprocessing
 multiprocessing.set_start_method("fork")
@@ -53,8 +53,57 @@ import subprocess
 import mcfost # mcfost-master analysis code from https://github.com/mperrin/mcfost-python, The folder called mcfost MUST be in the same folder as this code to run! 
 import disk_convolution as dc
 import DE_plot
+from utils import setup_logging
+setup_logging()
 
-########################################################
+import logging
+logging = logging.getLogger('diffevo')
+
+
+# import mkl
+# mkl.set_num_threads(1)
+
+# ########################################################
+# def generateModel(x_all):
+#     distance = 47.78 #pc
+#     g_1 = 0.33 
+#     pa = 99.1-111.254
+#     inc = 30.2
+#     alpha_in = x_all[0] #rising component r^alphaIn (value > 0)
+#     r_c = x_all[1] #critical radius, not far from where the rise and decline joints
+#     alpha_out = x_all[2] # decreasing component r^alphaOut (value < 0)
+#     flux = x_all[3] # factor to scale the overall brightness
+
+#     r_in = 0 # cutoff radius from 0 to r_c
+#     r_out = 300 # cutoff radius from r_c to +infinity
+
+#     dx = 0
+#     dy = 0
+
+#     los_factor = 1.             # Keep fixed. Line Of Sight factor: make the 3rd dimension Nx larger to compensate projection effects
+#     asp_ratio = 0.04            # Keep fixed for now. Aspect ratio for the scale height. 0.04 expected for debris disks (Thebault 2009)
+
+#     spf_list = [lambda i: debrisdiskfm.anadisk_sum_mask_MMB.hgg_phase_function(i, [g_1], rayleigh_pol = False)]
+#     # spf_list = [lambda i: debrisdiskfm.anadisk_sum_mask_MMB.hgg_phase_function2(i, g_1, g_2, w1, rayleigh_pol = False)]
+#     nspfs=len(spf_list)
+
+#     pixscale_JWST_NIRSpec = 0.10435 #arcsec per pixel
+
+#     dim = np.copy(640) #dimension of the image size in pixels (i.e., dim * dim), set this value to the number of pixels on each side of your image
+    
+#     psfcenx = int(  dim  / 2 ) #center of x-position in pixels, need to double check if the int function is needed
+#     psfceny = int(  dim  / 2 ) #center of y-position in pixels, need to double check if the int function is needed
+
+#     # The code needs a mask to run, but the mask should rather be added only after convolution by a PSF, so putting it to zero here. 
+#     mask_diskfm = np.zeros((dim, dim), dtype=bool)
+
+#     tst1 = debrisdiskfm.anadisk_sum_mask_MMB.generate_disk( spf_list, inc = inc, pa = pa, R1 = r_in, Rc = r_c, R2 = r_out,
+#                             aspect_ratio = asp_ratio, beta_out = alpha_out, beta_in = alpha_in,
+#                             distance = distance, los_factor = los_factor, pixscale = pixscale_JWST_NIRSpec,
+#                             dim = dim, psfcenx = psfcenx, psfceny = psfceny, mask = mask_diskfm, dx = dx, dy = dy)
+#     tst1[ psfcenx , psfceny , : ] = np.zeros(nspfs) #only one model, this is Bin copied from other comdes that used this code.
+
+#     return tst1[:, :, 0]*flux
 
 def make_model(x):
     '''
@@ -76,10 +125,19 @@ def make_model(x):
     for i, key in enumerate(gridgenerator_names):
         if key == 'dust_settling':
             param = int(round(x[i],0))
+        if key == 'dust_mass':
+            param = 10**x[i]
+        elif key == 'dust_porosity':
+            param = x[i]
+            ## from Brunngräber+2017  to calculate amin with dependence on porosity #### 
+            amin = 0.414 * ((1-param)**(-0.508)) * (16**(0.685 * ((1-param)**(-0.168))))
+            paramsdict['dust_amin'] = [amin]
+        elif key == 'surface_density':
+            param = x[i]
+            paramsdict['gamma_exp'] = [x[i]]
         else:
             param = x[i]
         paramsdict[key] = [param]
-    
     # creates a unique folder name to save the model into
     hash_string = str(hash(np.array2string(np.array(x)))) + str(hash(np.array2string(np.random.rand(len(gridgenerator_names))))) 
     # Hash the values to shrink the size, 2nd part is additional hash values to avoid same names
@@ -94,9 +152,9 @@ def make_model(x):
     os.mkdir(paraPath_hash)
     owd = os.getcwd()
     os.chdir(paraPath_hash) 
-    
+    # print(paramsdict)
     # create the params file using the mcfost-master grid_generator()
-    logging.info(f'creating grid for mcfost_model_{hash_string}')
+    # logging.info(f'creating grid for mcfost_model_{hash_string}')
     mcfost.grid_generator(INITIAL_PARA,
                           paramsdict, 
                           paraPath_hash,
@@ -108,7 +166,7 @@ def make_model(x):
     mod = f'{FILE_PREFIX}_{hash_string}.para'
 
     # run mcfost to create scattered light image
-    logging.info(f'creating mcfost model for mcfost_model_{hash_string}')
+    # logging.info(f'creating mcfost model for mcfost_model_{hash_string}')
     subprocess.call(f'mcfost {mod} -img {WAVELENGTH} -only_scatt >> {FILE_PREFIX}_imagemcfostout.txt', shell = True)
     
     # add a backup in case it fails
@@ -136,42 +194,50 @@ def fobj(x):
     """
 
     # create model and get filepath
-    logging.info(f'making model with {x}')
+    # logging.info(f'making model with {x}')
+    
     model_gz = make_model(x[:-1])
 
     # get mcfost pixel scale
     modelpixelscale = fits.getheader(model_gz)['CDELT2'] * 3600
 
     # convolve model with PSF 
-    logging.info('convolving model for ' + model_gz.split('/')[-3])
+    # logging.info('convolving model for ' + model_gz.split('/')[-3])
     if INSTRUMENT == 'NIRCam': 
         model_here_convolved = dc.convolve_disk(inst, tel_point, obj_params, hdul_psfs, model_gz, modelpixelscale, WAVELENGTH, DISTANCE_STAR)
         pad = (REDUCED_DATA.shape[0]//2) - (model_here_convolved.shape[0]//2)
         model_here_convolved = np.pad(model_here_convolved, pad)
         if model_here_convolved.shape[0] != REDUCED_DATA.shape[0]:
             raise ValueError('something wrong with padding')
-    else: # NOTE: still needs to be regridded to right pixel scale
-        model_here = fits.getdata(model_gz)[0,0,0,:,:]
-        model_here_hdr = fits.getheader(model_gz)
-        freq = const.c.value / (WAVELENGTH * 1e-6)
-        disk_model_mJy_as2 = ( (1e26 * model_here  / freq) * 1e3 ) / (modelpixelscale**2.)
-        xcen, ycen = model_here_hdr['CRPIX1'], model_here_hdr['CRPIX2']
-        disk_model_mJy_as2[ycen-2:ycen+2, xcen-2:xcen+2] = 0
-        model_here_convolved = convolve(disk_model_mJy_as2, hdul_psfs, boundary='wrap')    
+    # else: # NOTE: still needs to be regridded to right pixel scale
+    #     model_here = fits.getdata(model_gz)[0,0,0,:,:]
+    #     model_here_hdr = fits.getheader(model_gz)
+    #     freq = const.c.value / (WAVELENGTH * 1e-6)
+    #     disk_model_mJy_as2 = ( (1e26 * model_here  / freq) * 1e3 ) / (modelpixelscale**2.)
+    #     xcen, ycen = model_here_hdr['CRPIX1'], model_here_hdr['CRPIX2']
+    #     disk_model_mJy_as2[ycen-2:ycen+2, xcen-2:xcen+2] = 0
+    #     model_here_convolved = convolve(disk_model_mJy_as2, hdul_psfs, boundary='wrap')    
 
     # scale
     model_contrast = model_here_convolved * x[-1] 
     
     # do diskFM
-    logging.info('performing diskFM for ' + model_gz.split('/')[-3])
-    DISKOBJ.update_disk(model_contrast)
-    model_fm = DISKOBJ.fm_parallelized()[0]
-    model_fits = np.copy(model_fm)
+    # logging.info('performing diskFM for ' + model_gz.split('/')[-3])
+    t1 = time.time()
+    # DISKOBJ.update_disk(model_contrast)
+    # model_fm = DISKOBJ.fm_parallelized()[0]
+    # model_fits = np.copy(model_fm)
+    # fits.writeto(os.path.dirname(model_gz) + '/diskfm.fits', model_fits,overwrite=True)
+    t2 = time.time()
+    print('time', t2-t1)
+    model_fm = model_contrast
+    model_fits = model_contrast
    
     data = np.copy(REDUCED_DATA)
     noise = np.copy(NOISE)
     mod = np.copy(model_fm)
-
+    bkg = np.nanmean(data[200:240, 200:240])
+    data -= bkg
     # mask data so just disk is used in chi2
     for DT in [data, noise, mod]:
         DT[MASK] = np.nan
@@ -180,8 +246,9 @@ def fobj(x):
     N = np.count_nonzero(~np.isnan(data))
     M = len(x)
     v = N-M
+
     chi2 = (1./v) * np.nansum(((data - mod) / noise)**2.)
-    logging.info('chi2 for ' + model_gz.split('/')[-3] + f' : {chi2}')
+    logging.info('chi2 for model ' + model_gz.split('/')[-3] + f' : {chi2}')
     # save parameters to .csv file.  each model gets its own .csv file b/c I can't figure out how to open/write/save 1 file while multiprocessing...
     file_path = model_gz.split(f'data_{WAVELENGTH}')[0]
 
@@ -192,16 +259,17 @@ def fobj(x):
     data_dict['CHI2'] = [chi2]
 
     new_df = pd.DataFrame(data_dict)
-    logging.info('saving to ' +  file_path.split('/')[-2] + '.csv')
+    # logging.info('saving to ' +  file_path.split('/')[-2] + '.csv')
     new_df.to_csv(file_path[:-1] +  '.csv')
 
+    
     if SAVE: #if its the best fit model, save it, otherwise, delete the folder with fits files to save space
         hdr = fits.getheader(model_gz)
         for key in data_dict:
             hdr[key] = data_dict[key][0]
         fits.writeto(os.path.dirname(model_gz) + '/diskfm.fits', model_fits,header=hdr, overwrite=True)
     else: # delete fits files and folder  
-        logging.info('deleting folder: ' + file_path.split('/')[-2])
+        # logging.info('deleting folder: ' + file_path.split('/')[-2])
         shutil.rmtree(file_path)
 
     return chi2 
@@ -213,7 +281,7 @@ def initialize_diskfm():
     initialize the Diff Evo by prepearing the diskFM object 
         modeled from J. Mayozer debrisdisk_mcmc_fit_and_plot/diskfit_mcmc/initialize_diskfm()
     '''
-    numbasis = [3]
+    numbasis = [1]
 
     model_here_convolved = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_FirstModelConvolved.fits')
     pad = (REDUCED_DATA.shape[0]//2) - (model_here_convolved.shape[0]//2)
@@ -223,7 +291,7 @@ def initialize_diskfm():
                      numbasis,
                      None,
                      model_here_convolved,
-                     basis_filename=INITIALIZE_DIR + '/' + FILE_PREFIX + '_klbasis.h5',
+                     basis_filename=KLBASIS,
                      load_from_basis=True)
     # test the diskFM object
     diskobj.update_disk(model_here_convolved)
@@ -249,6 +317,7 @@ NOISE_DIR  =  params_de_yaml['NOISE_DIR'] # path to noise annuli RDI data
 INITIALIZE_DIR = params_de_yaml['INITIALIZE_DIR'] # path to initial files
 
 INITIAL_PARA = INITIALIZE_DIR + '/' + params_de_yaml['INITIAL_PARA'] # initial .para file
+KLBASIS = params_de_yaml['KLBASIS']
 
 WAVELENGTH = params_de_yaml['WAVELENGTH'] # in micron
 FILTER = params_de_yaml['FILTER'] # name of filter
@@ -279,7 +348,7 @@ gridgenerator_names = params_de_yaml['GRIDGEN_DICT'] # name of free parameters f
 labels = list(params_de_yaml['LABELS'].values()) # labels for corner plot 
 
 MASK = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_MASK.fits') # mask for calculating chi2
-nu = np.count_nonzero(MASK)-len(bounds) # nu for chi2 calculation
+nu = np.count_nonzero(MASK==0)-len(bounds) # nu for chi2 calculation
 MASK = ma.make_mask(MASK)
 
 # make save directory if it does not exist
@@ -336,11 +405,11 @@ logging.info('Solution: f(%s) = %.5f' % (solution, evaluation))
 
 t2 = time.time()
 end_time = datetime.now()
-logging.info('started at: ', start_time)
-logging.info('ended at: ', end_time)
-logging.info('total time: ', t2-t1)
+print('started at: ', start_time)
+print('ended at: ', end_time)
+print('total time: ', t2-t1)
 
-########################################################
+#######################################################
      
 # do plotting and main .csv filing
 logging.info('starting plotting')
@@ -363,9 +432,9 @@ DE_plot.plot_parameterspace(len(truths), data, truths, chi2, bounds, labels, nu,
 
 # plot the best fit image and residuals
 BESTMOD_DIR = glob.glob(f'{SAVE_DIR}/*/data_{WAVELENGTH}/')[0]
-DE_plot.make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, WAVELENGTH, FILE_PREFIX, MASK=MASK, 
+DE_plot.make_final_images(os.path.dirname(SAVE_DIR), BESTMOD_DIR, REDUCED_DATA, NOISE, FILTER, FILE_PREFIX, MASK=MASK, 
                           title = FILE_PREFIX.replace('_', ' ') + ' ' + 'Best Fit model', 
-                          savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png',
+                          savefig=os.path.dirname(SAVE_DIR) + f'/{FILE_PREFIX}_DEmodel.png', amplitude=1,
                           make_files=False)
 
 logging.info("FINISHED!")

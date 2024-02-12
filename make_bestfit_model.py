@@ -36,6 +36,19 @@ import disk_convolution as dc
 def make_mcfost_model(SAVE_DIR, WAVELENGTH, INITIAL_PARAM_FILE, FILE_PREFIX, paramsdict):
     '''
     '''
+    if 'dust_settling' in paramsdict.keys():
+        paramsdict['dust_settling'] = int(round(paramsdict['dust_settling'],0))
+    # if 'dust_mass' in  paramsdict.keys():
+    #     paramsdict['dust_mass'] = [10**paramsdict['dust_mass'][0]]
+    if 'dust_porosity' in  paramsdict.keys():
+        porosity = paramsdict['dust_porosity'][0]
+        ## from Brunngräber+2017  to calculate amin with dependence on porosity #### 
+        amin = 0.414 * ((1-porosity)**(-0.508)) * (16**(0.685 * ((1-porosity)**(-0.168))))
+        paramsdict['dust_amin'] = [amin]
+    if 'surface_density' in  paramsdict.keys():
+        paramsdict['gamma_exp'] = paramsdict['surface_density']
+
+    print(paramsdict)
     paraPath_hash =  SAVE_DIR + '/mcfost_models/bestfit_model/'
 
     if os.path.exists(paraPath_hash):
@@ -64,6 +77,7 @@ def make_mcfost_model(SAVE_DIR, WAVELENGTH, INITIAL_PARAM_FILE, FILE_PREFIX, par
     os.chdir(owd)
 
     return SAVE_DIR + f'/mcfost_models/bestfit_model/data_{WAVELENGTH}/RT.fits.gz'
+
     
 
 ########################################################
@@ -81,10 +95,8 @@ def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITI
     hdul_psfs = dc.make_psfgrid(inst, tel_point, grid_shape=grid_shape)
 
     print('making model!')
-    if WAVELENGTH == 'F200W':
-        wv = 2.0
-    else:
-        wv = 4.44
+
+    wv = WAVELENGTH
 
     model_gz = make_mcfost_model(SAVE_DIR, wv, INITIAL_PARAM_FILE, FILE_PREFIX, bestparams_dict)
     modelpixelscale = fits.getheader(model_gz)['CDELT2'] * 3600
@@ -138,22 +150,23 @@ def make_bestfit_model(SAVE_DIR, WAVELENGTH, DISKOBJ, REDUCED_DATA, NOISE, INITI
     return os.path.dirname(model_gz) + '/'
 
 ########################################################
-def initialize_diskfm(INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA):
+def initialize_diskfm(KLBASIS, INITIALIZE_DIR, FILE_PREFIX, REDUCED_DATA):
     '''
     initialize the Diff Evo by prepearing the diskFM object 
         modeled from J. Mayozer debrisdisk_mcmc_fit_and_plot/diskfit_mcmc/initialize_diskfm()
     '''
-    numbasis = [3]
+    numbasis = [1]
 
     model_here_convolved = fits.getdata(INITIALIZE_DIR + '/' + FILE_PREFIX + '_FirstModelConvolved.fits')
     pad = (REDUCED_DATA.shape[0]//2) - (model_here_convolved.shape[0]//2)
     model_here_convolved = np.pad(model_here_convolved, pad, constant_values=np.nan) 
     print('model opened .. starting DiskFM')
+    print(KLBASIS)
     diskobj = DiskFM(None,
                      numbasis,
                      None,
                      model_here_convolved,
-                     basis_filename=INITIALIZE_DIR + '/' + FILE_PREFIX + '_klbasis.h5',
+                     basis_filename=KLBASIS,
                      load_from_basis=True)
     # test the diskFM object
     diskobj.update_disk(model_here_convolved)
