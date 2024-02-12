@@ -1,0 +1,97 @@
+# parameter file for DiskDiffEvo
+
+
+# path to data
+PATH: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam    
+# location of raw datasets                   
+DATA_DIR : /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/spaceklip_2rolls/padded  
+# main directory to save mcfost models                                              
+DISKFM_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo    
+# actual directory to save mcfost models
+SAVE_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/F444W_modeling/Round2/mcfost_models       
+# path to reduced RDI data                                            
+REDUCEDDATA_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/spaceklip_2rolls/klipsub  
+# path to reduced RDI noise data                                      
+NOISE_DIR: /Users/sbetti/Documents/Science/datasets/JWST/49Ceti_NIRCam/background/klipsub
+# path to initial files
+INITIALIZE_DIR: /Users/sbetti/Documents/Science/DebrisDisks/49Ceti/disk_modeling/DiffEvo/initialize_files
+
+# main name of initialize file                                               
+FILE_PREFIX: 49Ceti_NRCALONG_MASK335R_F444W   
+# name of the initial MCFOST .para file
+INITIAL_PARA: 49Ceti_mcfost_F444W_params.para
+# name of reduced science data
+REDUCED_DATA: RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCALONG_F444W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits  
+# number frame within reduced data
+PYKLIP_FRAME: 2
+# name of annulus std noise map
+NOISE: BKG_STD_RDI_NANNU1_NSUBS1_JWST_NIRCAM_NRCALONG_F444W_MASKRND_MASKA335R_SUB320A335R-KLmodes-all.fits 
+
+WAVELENGTH: 4.44 # micron
+FILTER: 'F444W' # filter name
+INSTRUMENT: 'NIRCam'
+    
+DISTANCE_STAR: 59 # pc
+PIXSCALE_INS: 0.06247899 # arcsecond/pixel 0.031217475
+
+# delete intermediary .csv files after creating file one
+CLEAN_UP: False
+
+# bounds for differential evolution and free parameters
+BOUNDS:
+  I: [75,85] 
+  H0: [2,10]  
+  MDUST: [5.e-10, 8.e-9] # REQUIRES DOT TO BE NUMBER
+  BETA: [1,4] 
+  F: [1,2] 
+  AMIN: [1, 5] 
+  AEXP: [1,3] 
+  POROSITY: [0.01, 0.99]
+  DUSTSET: [0,3]
+  ALPH_VIS: [0.01, 2]
+  AMP: [.1, 5]
+
+# names of free parameters in mcfost/paramfile.py module
+GRIDGEN_DICT:
+  - inclinations
+  - scale_height
+  - dust_mass
+  - surface_density
+  - flaring
+  - dust_amin
+  - dust_exponent
+  - dust_porosity
+  - dust_settling
+  - alpha_viscosity
+
+# information for NIRCam PSF modeling
+obsdate: 2023-08-24T22:49:38.762
+grid_shape: circle
+ROLL_REF_ANGLE: 261.370
+OBJ_INFO:
+  name: 49 Ceti 
+  sptype: A0V 
+  Teff: 9817 
+  log_g: 4.0
+  metallicity: -0.5 
+  dist: 59
+  flux: 5.458
+  flux_units: vegamag
+  bp_ref: bp_2mass('k')
+  RA_obj: 36.48744  # RA (decimal deg) of source
+  Dec_obj:  -12.29054  # Dec (decimal deg) of source
+
+# labels for corner plot 
+LABELS:
+  I: $i$ (deg)
+  H0: $h_{50}$ (AU)
+  MDUST: M$_D$
+  BETA: surface density \n exp $\beta$
+  F: flaring \n $f$
+  AMIN: a$_\mathrm{min}$
+  AEXP: a$_\mathrm{exp}$
+  POROSITY: porosity
+  DUSTSET: type of \n dust settling
+  ALPH_VIS: $\alpha_{viscosity}$
+  AMP: A
+
